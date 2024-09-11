@@ -1,0 +1,39 @@
+ID: studentbackup_interface
+_schema-version: '3.1'
+version: 0.0.1
+modules:
+  - name: studentbackup_interface
+    type: nodejs
+    path: .
+    parameters: 
+      routes:
+        - random-route: true
+    requires:
+      - name: node-xsuaa-instance
+      - name: sap-btp-sapui5-destination-service
+      - name: jobinstance
+      - name: con001
+resources:
+  - name: node-xsuaa-instance
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+
+  - name: sap-btp-sapui5-destination-service
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: destination
+      service-plan: lite
+
+  - name: jobinstance
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: jobscheduler
+      service-plan: lite
+
+  - name: con001
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: connectivity
+      service-plan: lite
