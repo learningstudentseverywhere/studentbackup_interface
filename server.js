@@ -21,6 +21,17 @@ const PORT = process.env.PORT || 5000;
 //Callback function
 const handleFetchStudentData = async (req, res) => {
     //Get the batch2cap destination details using fetchdestapi
+
+    //Acknowledgement
+    res.status(202).send();
+
+    //Getting the Job id, schedule id
+    var sap_job_id = req.headers['x-sap-job-id'];
+    var sap_job_schedule_id = req.headers['x-sap-job-schedule-id'];
+    var sap_job_run_id = req.headers['x-sap-job-run-id'];
+
+    
+    
     let responseCAPDestination = ""
     try {
         responseCAPDestination = await baseDestination({
@@ -66,6 +77,31 @@ const handleFetchStudentData = async (req, res) => {
         console.log(error)
     }
 
+    //Fetching job destination details using base destination
+    let responseJobDestination = []
+    try {
+        responseJobDestination = await baseDestination({
+            method: "GET",
+            url: "/readDestinationDetails?destination=jobschedulerDestination",
+            params: {
+                $format: "json"
+            },
+            headers: {
+                accept: "application/json"
+            }
+        });
+    }
+    catch (error) {
+        console.log(error)
+    }
+
+    //Storing the data fetched from destination
+    var jobSchedulerURL = responseJobDestination.data.URL;
+    var jobSchedulerUser = responseJobDestination.data.User;
+    let jobSchedulerPassword = responseJobDestination.data.Password;
+   
+
+    let studentsDataFromCAP = []
     //Get the students data
     try{
         const StudentsData = await axios({
@@ -76,13 +112,79 @@ const handleFetchStudentData = async (req, res) => {
               accept: "application/json"
             }
           });
-        let  resultFromCAP = StudentsData.data.value
+        studentsDataFromCAP = StudentsData.data.value
         
         }
         catch(error){
           console.log(error);
         }
+    
+    
+    //Post the student data to the backup table
+    let originalData = studentsDataFromCAP.length;
+    let count=0;
+    for(let data of studentsDataFromCAP){
+          try{
+             let studentBackupUpload = await axios({
+                method:"POST",
+                url: capURL + "/odata/v4/school/studentsBackup",
+                headers:{
+                    'Content-Type':'application/json',
+                    'Authorization':tokenCAP
+                },
+                data:data
+             })
+             count = count + 1;
+          }
+          catch(error){
+            console.log(error);
+          }
+    }
 
+
+    //Updating to job scheduler status
+    let AuthValue = btoa(jobSchedulerUser + ":" + jobSchedulerPassword)
+    if(count>0){
+        try{
+            await axios({
+                method: "PUT",
+                url: jobSchedulerURL + `/scheduler/jobs/${sap_job_id}/schedules/${sap_job_schedule_id}/runs/${sap_job_run_id}`,
+                headers: {
+                    'Accept': 'application/json',
+                    "Authorization": "Basic " + AuthValue
+                },
+                data: {
+                    "success": true,
+                    "message": "Successfully copied data"
+                }
+            });
+        }
+        catch(error){
+            console.log(error);
+        }
+    }
+
+    else{
+        try{
+            await axios({
+                method: "PUT",
+                url: jobSchedulerURL + `/scheduler/jobs/${sap_job_id}/schedules/${sap_job_schedule_id}/runs/${sap_job_run_id}`,
+                headers: {
+                    'Accept': 'application/json',
+                    "Authorization": "Basic " + AuthValue
+                },
+                data: {
+                    "success": false,
+                    "message": "Error while sending"
+                }
+            });
+        }
+        catch(error){
+            console.log(error);
+        }
+    }
+  
+    console.log(`Out of ${originalData} Records, ${count} Records created`);
 }
 
 //Creating a Route
